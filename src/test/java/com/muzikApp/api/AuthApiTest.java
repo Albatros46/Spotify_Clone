@@ -169,7 +169,8 @@ class AuthApiTest extends ApiTestSupport {
         mvc.perform(put("/api/users/me/password").header("Authorization", bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("oldPassword", "wrong-old", "newPassword", "NewSecret456!")))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("Old password is wrong"));
         mvc.perform(put("/api/users/me/password").header("Authorization", bearer(token))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(json("oldPassword", PASSWORD, "newPassword", "NewSecret456!")))
@@ -198,10 +199,14 @@ class AuthApiTest extends ApiTestSupport {
     @Test
     void corsAllowsOnlyTheConfiguredFrontend() throws Exception {
         mvc.perform(options("/api/songs")
-                        .header("Origin", "http://localhost:4200")
+                        .header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isOk())
-                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:4200"));
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"));
+        mvc.perform(options("/api/songs")
+                        .header("Origin", "http://127.0.0.1:5173")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk());
         mvc.perform(options("/api/songs")
                         .header("Origin", "http://evil.example")
                         .header("Access-Control-Request-Method", "GET"))

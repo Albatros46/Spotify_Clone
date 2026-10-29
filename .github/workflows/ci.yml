@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   test:
-    name: mvn verify (H2, no secrets needed)
+    name: backend (mvn verify, H2, no secrets needed)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -35,3 +35,21 @@ jobs:
           path: target/surefire-reports/
           if-no-files-found: ignore
           retention-days: 14
+
+  frontend:
+    name: frontend (type check, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

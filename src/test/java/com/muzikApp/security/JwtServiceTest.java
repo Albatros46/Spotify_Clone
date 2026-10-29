@@ -76,7 +76,7 @@ class JwtServiceTest {
     }
 
     private static JwtService service(String secret, Duration ttl) {
-        return new JwtService(new AppProperties("http://localhost", "http://localhost:4200",
+        return new JwtService(new AppProperties("http://localhost", java.util.List.of("http://localhost:5173"),
                 new AppProperties.Jwt(secret, ttl, ttl), new AppProperties.Storage("s", "i")));
     }
 

@@ -20,7 +20,7 @@ class FileStorageServiceTest {
     Path tmp;
 
     private FileStorageService storage() {
-        return new FileStorageService(new AppProperties("http://localhost", "http://localhost:4200",
+        return new FileStorageService(new AppProperties("http://localhost", java.util.List.of("http://localhost:5173"),
                 new AppProperties.Jwt("x".repeat(32), Duration.ofMinutes(1), Duration.ofMinutes(1)),
                 new AppProperties.Storage(tmp.resolve("songs").toString(), tmp.resolve("images").toString())));
     }

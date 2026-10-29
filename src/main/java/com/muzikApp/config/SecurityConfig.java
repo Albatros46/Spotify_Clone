@@ -64,7 +64,8 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource(AppProperties properties) {
         CorsConfiguration cors = new CorsConfiguration();
-        cors.setAllowedOrigins(List.of(properties.frontendUrl()));
+        // localhost and 127.0.0.1 are different origins for the browser, so both are listed (found in a UI test)
+        cors.setAllowedOrigins(properties.frontendUrls());
         cors.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Authorization", "Content-Type"));
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

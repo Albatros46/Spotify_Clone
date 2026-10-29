@@ -12,7 +12,7 @@
 	<artifactId>Spotify_Clone</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>Spotify_Clone</name>
-	<description>Spotify Clone with Gemini AI | Full Stack Project using Spring Boot (Java), Angular &amp; MySQL</description>
+	<description>Spotify Clone | Full Stack Project using Spring Boot (Java), React &amp; PostgreSQL</description>
 	<url/>
 	<licenses>
 		<license/>

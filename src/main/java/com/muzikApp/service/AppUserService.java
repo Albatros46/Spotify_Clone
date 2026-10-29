@@ -1,6 +1,5 @@
 package com.muzikApp.service;
 
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +8,7 @@ import com.muzikApp.dto.request.ChangePasswordRequest;
 import com.muzikApp.dto.request.UpdateProfileRequest;
 import com.muzikApp.dto.response.AppUserResponse;
 import com.muzikApp.entities.AppUser;
+import com.muzikApp.exception.BadRequestException;
 import com.muzikApp.exception.ConflictException;
 import com.muzikApp.repository.AppUserRepository;
 
@@ -52,8 +52,10 @@ public class AppUserService {
     @Transactional
     public void changePassword(ChangePasswordRequest request) {
         AppUser user = currentUser.get();
+        // 400, not 401: the user IS logged in. A 401 made the frontend refresh the token and send the
+        // password change a second time, and the message said "Invalid email or password" (found in a UI test).
         if (!passwordEncoder.matches(request.oldPassword(), user.getPassword())) {
-            throw new BadCredentialsException("Old password is wrong");
+            throw new BadRequestException("Old password is wrong");
         }
         user.setPassword(passwordEncoder.encode(request.newPassword()));
         user.setRefreshToken(null);

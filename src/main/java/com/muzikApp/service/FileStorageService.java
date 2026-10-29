@@ -1,5 +1,6 @@
 package com.muzikApp.service;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -39,11 +40,21 @@ public class FileStorageService {
 
     /** @return the public URL path, e.g. /uploads/songs/3f2c....mp3 */
     public String storeSong(MultipartFile file) {
-        return store(file, songDir, "audio/", AUDIO_EXTENSIONS, "/uploads/songs/");
+        return store(Upload.of(file), songDir, "audio/", AUDIO_EXTENSIONS, "/uploads/songs/");
     }
 
     public String storeImage(MultipartFile file) {
-        return store(file, imageDir, "image/", IMAGE_EXTENSIONS, "/uploads/images/");
+        return store(Upload.of(file), imageDir, "image/", IMAGE_EXTENSIONS, "/uploads/images/");
+    }
+
+    /** Same checks as an upload, for files the app generates itself (demo data). */
+    public String storeSong(String fileName, String contentType, byte[] content) {
+        return store(Upload.of(fileName, contentType, content), songDir, "audio/", AUDIO_EXTENSIONS, "/uploads/songs/");
+    }
+
+    public String storeImage(String fileName, String contentType, byte[] content) {
+        return store(Upload.of(fileName, contentType, content), imageDir, "image/", IMAGE_EXTENSIONS,
+                "/uploads/images/");
     }
 
     /** Best effort: a file that cannot be deleted must not make the whole request fail. */
@@ -62,21 +73,38 @@ public class FileStorageService {
         }
     }
 
-    private String store(MultipartFile file, Path dir, String typePrefix, Set<String> extensions, String urlPrefix) {
-        if (file == null || file.isEmpty()) {
+    /** What store() needs from a file, whether it came from an HTTP upload or was generated. */
+    private record Upload(String originalName, String contentType, boolean empty, InputStreamSource content) {
+
+        interface InputStreamSource {
+            InputStream open() throws IOException;
+        }
+
+        static Upload of(MultipartFile file) {
+            return file == null ? new Upload(null, null, true, null)
+                    : new Upload(file.getOriginalFilename(), file.getContentType(), file.isEmpty(), file::getInputStream);
+        }
+
+        static Upload of(String name, String contentType, byte[] bytes) {
+            return new Upload(name, contentType, bytes.length == 0, () -> new ByteArrayInputStream(bytes));
+        }
+    }
+
+    private String store(Upload file, Path dir, String typePrefix, Set<String> extensions, String urlPrefix) {
+        if (file.empty()) {
             throw new BadRequestException("File is empty");
         }
-        String contentType = file.getContentType();
+        String contentType = file.contentType();
         if (contentType == null || !contentType.toLowerCase(Locale.ROOT).startsWith(typePrefix)) {
             throw new BadRequestException("File must be of type " + typePrefix + "*, was " + contentType);
         }
-        String extension = extension(file.getOriginalFilename());
+        String extension = extension(file.originalName());
         if (!extensions.contains(extension)) {
             throw new BadRequestException("File extension must be one of " + extensions.stream().sorted().toList());
         }
         String name = UUID.randomUUID() + "." + extension;
         Path target = dir.resolve(name).normalize();
-        try (InputStream in = file.getInputStream()) {
+        try (InputStream in = file.content().open()) {
             Files.createDirectories(dir);
             Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
