@@ -20,7 +20,8 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 
 /**
- * Creates and checks the two token types. Both are signed JWTs (HS256); the claim "type" keeps them
+ * Creates and checks the two token types. Both are HMAC-signed JWTs; the key length decides the
+ * algorithm (32+ bytes HS256, 48+ HS384, 64+ HS512, found by the auth tests). The claim "type" keeps them
  * apart, so a refresh token cannot be used as an access token and the other way round.
  */
 @Service
@@ -29,7 +30,7 @@ public class JwtService {
     static final String TYPE = "type";
     static final String ACCESS = "access";
     static final String REFRESH = "refresh";
-    private static final int MIN_SECRET_BYTES = 32; // HS256 needs a 256-bit key
+    private static final int MIN_SECRET_BYTES = 32; // HS256, the weakest allowed, needs a 256-bit key
 
     private final SecretKey key;
     private final Duration accessTtl;

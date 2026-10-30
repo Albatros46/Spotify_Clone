@@ -1,6 +1,6 @@
 # Spotify Clone · Spring Boot REST API
 
-![Java](https://img.shields.io/badge/Java-21-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-6DB33F) ![Spring Security](https://img.shields.io/badge/Spring%20Security-7%20%2B%20JWT-6DB33F) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791) ![React](https://img.shields.io/badge/React-19-61DAFB) ![Tests](https://img.shields.io/badge/tests-58%20backend%20%2B%2014%20frontend-brightgreen)
+![Java](https://img.shields.io/badge/Java-21-orange) ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0-6DB33F) ![Spring Security](https://img.shields.io/badge/Spring%20Security-7%20%2B%20JWT-6DB33F) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-18-336791) ![React](https://img.shields.io/badge/React-19-61DAFB) ![Tests](https://img.shields.io/badge/tests-60%20backend%20%2B%2014%20frontend-brightgreen)
 
 A music streaming app: users upload songs, build playlists, share them and listen in the browser. Spring Boot REST API with stateless JWT authentication and refresh-token rotation, plus a React frontend with a player bar ([`frontend/`](frontend)).
 
@@ -164,7 +164,7 @@ sequenceDiagram
 | POST | `/api/auth/refresh` | – | refresh token → **new** pair (the old refresh token stops working) |
 | POST | `/api/auth/logout` | ✓ | revoke the refresh token |
 | GET / PUT | `/api/users/me` | ✓ | own profile |
-| PUT | `/api/users/me/password` | ✓ | change password (old one required, ends all sessions) |
+| PUT | `/api/users/me/password` | ✓ | change password (old one required; revokes the refresh token — see SC-03 below) |
 | POST | `/api/songs` | ✓ | `multipart/form-data`: `title`, `artist`, `album`, `file` (audio), `image` (optional) |
 | GET | `/api/songs?search=&page=&size=&sort=` | ✓ | paginated list, search in title / artist / album |
 | GET | `/api/songs/me`, `/api/songs/{id}` | ✓ | own songs, one song |
@@ -190,7 +190,7 @@ Every error has the same JSON shape:
 3. `./mvnw spring-boot:run` → `http://localhost:8042`
 
 ```bash
-./mvnw test     # 58 tests, in-memory H2 — no PostgreSQL and no secrets needed
+./mvnw test     # 60 tests, in-memory H2 — no PostgreSQL and no secrets needed
 ```
 
 ## Frontend (React)
@@ -263,7 +263,33 @@ After the unit and API tests were green, I ran backend + frontend against Postgr
 
 Also checked in the UI: a reload keeps the session (refresh token), the audio really plays (`paused: false`, position advancing), the player stops at the end, adding the same song twice shows the API's 409 message, and after log out the old refresh token is rejected by the server (401).
 
-## Tests (58 backend + 14 frontend)
+## Database migrations (v1.1.0)
+
+The schema is now owned by **Flyway** (`src/main/resources/db/migration`), and Hibernate only validates it (`ddl-auto=validate`).
+
+Why: the independent auth test suite ([Auth-JWT-](https://github.com/Albatros46/Auth-JWT-)) found that **uploading a song without a cover answered 500** on my local database (**SC-06**). The cover had become optional in v1.0.0, but that database was created by the original code, and `ddl-auto=update` never removes a `NOT NULL` constraint. Fresh databases (tests, CI) were fine, so no test inside this repository could see it.
+
+| Migration | Runs on |
+|---|---|
+| `V1__init.sql` — full schema | new, empty databases |
+| `V2__song_image_optional.sql` — drops `NOT NULL` on `song.image_url` | every database; a no-op where the column is already nullable |
+
+A database created before Flyway is **baselined at version 1** (`spring.flyway.baseline-on-migrate=true`) and only gets V2. Verified on the real PostgreSQL 18 database: baselined at 1, V2 applied in 9 ms, all data kept. `LegacyDatabaseMigrationTest` rebuilds the old schema in H2, shows the insert failing, migrates, and shows it working.
+
+## Security findings from the auth test suite
+
+[Auth-JWT-](https://github.com/Albatros46/Auth-JWT-) attacks this API from the outside (52 tests). It confirmed tampered, unsigned (`alg: none`), expired and foreign-signed tokens are all rejected, and that a `role: ADMIN` claim is not trusted. It also found:
+
+| ID | Severity | Finding | Status |
+|---|---|---|---|
+| SC-06 | High | Upload without cover → 500 on databases created by the original code | **fixed in v1.1.0** (Flyway) |
+| SC-02 | Medium | The access token keeps working after logout (until it expires, max. 30 min) | open — needs a token denylist or a per-user token version |
+| SC-03 | Medium | After a password change the old access token keeps working (max. 30 min) | open — same fix as SC-02 |
+| SC-04 | Medium | No brute-force protection on login (no lockout, no 429) | open |
+| SC-01 | Low | 401 answers lack `WWW-Authenticate: Bearer` (RFC 6750) | open |
+| SC-05 | Info | The signing algorithm follows the secret's length (HS512 with a 64+ byte secret); the docs said HS256 | docs corrected |
+
+## Tests (60 backend + 14 frontend)
 
 | Class | Tests | What |
 |---|---|---|
@@ -272,6 +298,7 @@ Also checked in the UI: a reload keeps the session (refresh token), the audio re
 | `PlaylistApiTest` | 10 | `isPublic` JSON name, private by default, validation, 404 for others' private playlists, read-only for others, positions and gap closing, duplicates, song deletion, update / delete |
 | `JwtServiceTest` | 8 | token types, tampering, other secret, expiry, short secret |
 | `FileStorageServiceTest` | 6 | random names, path traversal, content type, extension allow-list, delete stays inside the folder |
+| `LegacyDatabaseMigrationTest` | 2 | old schema → bug reproduced → migration → fixed; new database gets V1 + V2 |
 | `DemoDataSeederTest` | 3 | the README demo login works, 8 songs + 3 playlists, files are real WAV / PNG, no duplicates on restart |
 | `TokenHasherTest` · context | 3 | |
 | frontend `client.test.ts` | 8 | Bearer header, `ApiError` with field errors, plain-text errors, refresh + retry, **one** refresh for parallel 401s, logout when refresh fails, no refresh for public calls, 204 |
@@ -283,7 +310,8 @@ Beyond the tests, the app was run against the real PostgreSQL 18 database and th
 ## Next steps
 - Forgot / reset password by e-mail (`ForgotPasswordRequest` is prepared)
 - Gemini AI song insights (`SongAiInsightsResponse` is prepared; feature off without `GEMINI_API_KEY`)
-- Playlist cover upload · Flyway migrations instead of `ddl-auto=update`
+- Fix SC-02 / SC-03 (token version per user), SC-04 (login rate limit), SC-01
+- Playlist cover upload
 - Automate the manual UI check above as Playwright end-to-end tests
 
 ## What I learned
